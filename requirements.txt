@@ -9,3 +9,4 @@ scikit-learn
 tensorflow
 joblib
 python-dotenv
+gunicorn
