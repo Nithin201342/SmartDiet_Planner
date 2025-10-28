@@ -11,7 +11,6 @@ env/
 ENV/
 
 # Environment variables / secrets
-.env
 MongoPass.txt
 
 # OS / Editor files
