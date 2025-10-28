@@ -1,6 +1,7 @@
 flask
 flask-pymongo
 flask-login
+flask-email
 werkzeug
 dnspython
 pandas
