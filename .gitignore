@@ -22,9 +22,3 @@ Thumbs.db
 
 # Logs
 *.log
-
-# Large model checkpoints (optional: keep only if <100MB)
-# If you want to track models, remove these lines
-*.h5
-*.keras
-*.pkl
