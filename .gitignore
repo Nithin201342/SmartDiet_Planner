@@ -12,6 +12,7 @@ ENV/
 
 # Environment variables / secrets
 MongoPass.txt
+.env
 
 # OS / Editor files
 .DS_Store
