@@ -17,6 +17,7 @@ app.config["MONGO_URI"] = os.getenv("MONGO_URI", "mongodb://localhost:27017/heli
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "supersecretkey")
 
 mongo = PyMongo(app)
+db = mongo.cx.get_database("helio")
 
 # ✅ Load trained model + preprocessing
 model = tf.keras.models.load_model("model/diet_model.keras")
@@ -74,7 +75,7 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    user_data = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+    user_data = db.users.find_one({"_id": ObjectId(user_id)})
     if user_data:
         return User(user_data)
     return None
@@ -90,7 +91,7 @@ def register():
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
-        if mongo.db.users.find_one({"username": username}):
+        if db.users.find_one({"username": username}):
             flash("Username already exists!", "danger")
             return redirect(url_for("register"))
         hashed_pw = generate_password_hash(password)
@@ -105,7 +106,7 @@ def login():
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
-        user_data = mongo.db.users.find_one({"username": username})
+        user_data = db.users.find_one({"username": username})
         if user_data and check_password_hash(user_data["password"], password):
             user = User(user_data)
             login_user(user)
@@ -118,13 +119,13 @@ def login():
 @login_required
 def dashboard():
     # Inside app.py dashboard route
-    user_likes = mongo.db.likes.find({"user_id": current_user.id})
+    user_likes = db.likes.find({"user_id": current_user.id})
 
     pipeline = [
         {"$group": {"_id": "$diet_name", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}}
     ]
-    global_likes = list(mongo.db.likes.aggregate(pipeline))
+    global_likes = list(db.likes.aggregate(pipeline))
 
     return render_template("dashboard.html", username=current_user.username, user_likes=user_likes, global_likes=global_likes)
 
@@ -163,18 +164,18 @@ def profile():
             "sleep_hours": request.form.get("sleep_hours"),
         }
 
-        mongo.db.profiles.update_one({"user_id": current_user.id}, {"$set": data}, upsert=True)
+        db.profiles.update_one({"user_id": current_user.id}, {"$set": data}, upsert=True)
         flash("Profile updated successfully!", "success")
         return redirect(url_for("profile"))
 
-    profile = mongo.db.profiles.find_one({"user_id": current_user.id})
+    profile = db.profiles.find_one({"user_id": current_user.id})
     return render_template("profile.html", profile=profile)
 
 
 @app.route("/predict")
 @login_required
 def predict():
-    profile = mongo.db.profiles.find_one({"user_id": current_user.id})
+    profile = db.profiles.find_one({"user_id": current_user.id})
 
     if not profile:
         flash("Please complete your profile first!", "danger")
@@ -306,14 +307,14 @@ def predict():
     likes_per_plan = []
     user_liked_per_plan = []
     for i, plan in enumerate(recommendations, start=1):
-        count = mongo.db.likes.count_documents({
+        count = db.likes.count_documents({
             "diet_name": meal_plan,
             "plan_index": i
         })
         likes_per_plan.append(count)
 
         # check if current user already liked this specific plan
-        existing = mongo.db.likes.find_one({
+        existing = db.likes.find_one({
             "user_id": current_user.id,
             "diet_name": meal_plan,
             "plan_index": i
@@ -321,7 +322,7 @@ def predict():
         user_liked_per_plan.append(existing is not None)
 
     # total likes for the whole diet (optional)
-    total_likes = mongo.db.likes.count_documents({"diet_name": meal_plan})
+    total_likes = db.likes.count_documents({"diet_name": meal_plan})
 
     return render_template(
         "prediction.html",
@@ -337,14 +338,14 @@ def predict():
 @app.route("/like/<diet_name>/<int:plan_index>")
 @login_required
 def like_diet(diet_name, plan_index):
-    existing_like = mongo.db.likes.find_one({
+    existing_like = db.likes.find_one({
         "user_id": current_user.id,
         "diet_name": diet_name,
         "plan_index": plan_index
     })
 
     if not existing_like:
-        mongo.db.likes.insert_one({
+        db.likes.insert_one({
             "user_id": current_user.id,
             "diet_name": diet_name,
             "plan_index": plan_index
