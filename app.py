@@ -31,6 +31,7 @@ app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_USERNAME')
 mail = Mail(app) 
 
 mongo = PyMongo(app)
+db = mongo.cx.get_database("helio")
 
 s = URLSafeTimedSerializer(app.secret_key)
 
@@ -83,7 +84,7 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    user_data = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+    user_data = mongo.users.find_one({"_id": ObjectId(user_id)})
     if user_data:
         return User(user_data)
     return None
@@ -111,16 +112,16 @@ def register():
             flash("Password must contain at least one special character.", "danger")
             return redirect(url_for("register"))
 
-        if mongo.db.users.find_one({"username": username}):
+        if mongo.users.find_one({"username": username}):
             flash("Username already exists!", "danger")
             return redirect(url_for("register"))
         
-        if mongo.db.users.find_one({"email": email}):
+        if mongo.users.find_one({"email": email}):
             flash("Email address is already registered.", "danger")
             return redirect(url_for("register"))
             
         hashed_pw = generate_password_hash(password)
-        mongo.db.users.insert_one({"username": username, "email": email, "password": hashed_pw})
+        mongo.users.insert_one({"username": username, "email": email, "password": hashed_pw})
         flash("Registration successful! Please login.", "success")
         return redirect(url_for("login"))
     return render_template("register.html")
@@ -131,7 +132,7 @@ def login():
     if request.method == "POST":
         email = request.form.get("email")
         password = request.form.get("password")
-        user_data = mongo.db.users.find_one({"email": email})
+        user_data = mongo.users.find_one({"email": email})
         if user_data and check_password_hash(user_data["password"], password):
             user = User(user_data)
             login_user(user)
@@ -144,7 +145,7 @@ def login():
 def forgot_password():
     if request.method == "POST":
         email = request.form.get("email")
-        user = mongo.db.users.find_one({"email": email})
+        user = mongo.users.find_one({"email": email})
 
         if user:
             token = s.dumps(email, salt='password-reset-salt')
@@ -183,7 +184,7 @@ def reset_password(token):
             return render_template("reset_password.html", token=token)
 
         hashed_pw = generate_password_hash(new_password)
-        mongo.db.users.update_one({"email": email}, {"$set": {"password": hashed_pw}})
+        mongo.users.update_one({"email": email}, {"$set": {"password": hashed_pw}})
         
         flash("Your password has been reset successfully! You can now login.", "success")
         return redirect(url_for("login"))
@@ -194,7 +195,7 @@ def reset_password(token):
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    profile = mongo.db.profiles.find_one({"user_id": current_user.id})
+    profile = mongo.profiles.find_one({"user_id": current_user.id})
     return render_template( "dashboard.html", profile=profile )
 
 
@@ -228,19 +229,19 @@ def profile():
                 bmi = None
         data["bmi"] = bmi
 
-        mongo.db.profiles.update_one({"user_id": current_user.id}, {"$set": data}, upsert=True)
+        mongo.profiles.update_one({"user_id": current_user.id}, {"$set": data}, upsert=True)
         flash("Profile updated successfully!", "success")
         return redirect(url_for("profile"))
         # --- END OF MODIFICATION ---
         
-    profile = mongo.db.profiles.find_one({"user_id": current_user.id})
+    profile = mongo.profiles.find_one({"user_id": current_user.id})
     return render_template("profile.html", profile=profile)
 
 
 @app.route("/get-prediction")
 @login_required
 def get_prediction():
-    profile = mongo.db.profiles.find_one({"user_id": current_user.id}) or {}
+    profile = mongo.profiles.find_one({"user_id": current_user.id}) or {}
     if not all(k in profile for k in ["age", "gender", "height_cm", "weight_kg"]):
         return jsonify({"success": False, "message": "Please complete your profile first!"})
 
@@ -300,7 +301,7 @@ def get_swap():
         return jsonify({"success": False, "message": "Invalid diet name."}), 404
 
     # --- START OF MODIFICATION: Filter swaps based on preference ---
-    profile = mongo.db.profiles.find_one({"user_id": current_user.id}) or {}
+    profile = mongo.profiles.find_one({"user_id": current_user.id}) or {}
     preference = profile.get("dietary_preference", "both")
     
     all_meal_options = diet_data.get("meal_options", [])
@@ -355,7 +356,7 @@ def save_workout():
         "description": data.get("description"), "plan": data.get("plan"),
         "saved_at": datetime.utcnow()
     }
-    mongo.db.saved_workouts.insert_one(saved_workout)
+    mongo.saved_workouts.insert_one(saved_workout)
     return jsonify({"success": True, "message": "Workout saved successfully!"})
 
 
@@ -371,22 +372,22 @@ def save_prediction():
         "user_id": current_user.id, "meal_plan_name": meal_plan_name,
         "meals": meals, "saved_at": datetime.utcnow()
     }
-    mongo.db.saved_plans.insert_one(saved_plan)
+    mongo.saved_plans.insert_one(saved_plan)
     return jsonify({"success": True, "message": "Plan saved successfully!"})
 
 
 @app.route("/saved-plans")
 @login_required
 def saved_plans():
-    user_saved_diets = list(mongo.db.saved_plans.find({"user_id": current_user.id}).sort("saved_at", -1))
-    user_saved_workouts = list(mongo.db.saved_workouts.find({"user_id": current_user.id}).sort("saved_at", -1))
+    user_saved_diets = list(mongo.saved_plans.find({"user_id": current_user.id}).sort("saved_at", -1))
+    user_saved_workouts = list(mongo.saved_workouts.find({"user_id": current_user.id}).sort("saved_at", -1))
     return render_template("saved_plans.html", saved_diets=user_saved_diets, saved_workouts=user_saved_workouts)
 
 
 @app.route("/delete-plan/<string:plan_id>", methods=["DELETE"])
 @login_required
 def delete_plan(plan_id):
-    result = mongo.db.saved_plans.delete_one({"_id": ObjectId(plan_id), "user_id": current_user.id})
+    result = mongo.saved_plans.delete_one({"_id": ObjectId(plan_id), "user_id": current_user.id})
     if result.deleted_count == 1:
         return jsonify({"success": True, "message": "Plan deleted successfully."})
     else:
@@ -396,7 +397,7 @@ def delete_plan(plan_id):
 @app.route("/delete-workout/<string:workout_id>", methods=["DELETE"])
 @login_required
 def delete_workout(workout_id):
-    result = mongo.db.saved_workouts.delete_one({"_id": ObjectId(workout_id), "user_id": current_user.id})
+    result = mongo.saved_workouts.delete_one({"_id": ObjectId(workout_id), "user_id": current_user.id})
     if result.deleted_count == 1:
         return jsonify({"success": True, "message": "Workout deleted successfully."})
     else:
