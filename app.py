@@ -95,7 +95,7 @@ def register():
             flash("Username already exists!", "danger")
             return redirect(url_for("register"))
         hashed_pw = generate_password_hash(password)
-        mongo.db.users.insert_one({"username": username, "password": hashed_pw})
+        db.users.insert_one({"username": username, "password": hashed_pw})
         flash("Registration successful! Please login.", "success")
         return redirect(url_for("login"))
     return render_template("register.html")
@@ -353,6 +353,21 @@ def like_diet(diet_name, plan_index):
 
     flash(f"You liked {diet_name} - Diet {plan_index}", "success")
     return redirect(url_for("predict"))
+
+
+# ---------------------------------------------------------------------------
+# NEW: this route was missing. base.html links to url_for('saved_plans') on
+# every page (via the shared navbar), so without this endpoint EVERY page
+# render -- including "/" -- raised a werkzeug BuildError and crashed with a
+# 500. Adjust the query/template below to match whatever "saved plans"
+# should actually show for your app; this default lists the plans the
+# current user has liked/saved.
+# ---------------------------------------------------------------------------
+@app.route("/saved-plans")
+@login_required
+def saved_plans():
+    saved = list(db.likes.find({"user_id": current_user.id}))
+    return render_template("saved_plans.html", saved_plans=saved)
 
 
 @app.route("/logout")
