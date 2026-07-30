@@ -18,7 +18,7 @@ from flask_mail import Mail, Message
 load_dotenv()
 
 app = Flask(__name__)
-app.config["MONGO_URI"] = os.getenv("MONGO_URI", "mongodb://localhost:27017/ProjectHelio")
+app.config["MONGO_URI"] = os.getenv("MONGO_URI", "mongodb://localhost:27017/Helio")
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "supersecretkey")
 
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
